@@ -24,19 +24,93 @@ export default function EstateflyerAI() {
   const [activeTab, setActiveTab] = useState('flyer');
   const [copied, setCopied] = useState(null);
 
-  // Mock property data parser
+  // Vylepšená funkcia na parsing údajov o nehnuteľnosti
   const parsePropertyData = (text) => {
-    // Simple regex-based extraction
-    const priceMatch = text.match(/\d+\s*(?:€|EUR|eur)?/);
-    const areaMatch = text.match(/(\d+)\s*(?:m²|m2|m\²)/i);
-    const roomsMatch = text.match(/(\d+)\s*(?:izbam?|rooms?|izby)/i);
+    // 1. PARSING CENY
+    // Prioritne hľadaj čísla s viac ako 4 ciframi pred € alebo EUR
+    let price = '250 000 €';
+    
+    // Regex na hľadanie cisel s medzerami alebo bez medzier (napr. 167 900 € alebo 167900€)
+    const priceMatches = text.match(/(\d{1,3}\s?\d{3,}|\d{4,})\s*(?:€|EUR|eur)?/gi);
+    if (priceMatches) {
+      for (let match of priceMatches) {
+        const number = parseInt(match.replace(/\s/g, '').replace(/[€EUR]/gi, ''));
+        // Kontrola či nie je číslo 1-5 pri slovách ako "izbový", "izby", "poschodie"
+        if (number > 5 || !/(izbový|izby|poschodie|izbam|room)/i.test(text.substring(Math.max(0, text.indexOf(match) - 50), text.indexOf(match) + match.length + 20))) {
+          if (number > 999) {
+            // Formáty ceny s medzerami
+            const formatted = number.toString();
+            const parts = formatted.match(/^(\d+?)(\d{3})?(\d{3})?$/);
+            if (parts) {
+              let formattedPrice = formatted.slice(0, -3).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ' + formatted.slice(-3);
+              price = formattedPrice.trim() + ' €';
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. PARSING VÝMERY (m², m2, m²)
+    let area = '120 m²';
+    const areaMatch = text.match(/(\d+(?:\s?\d{3})*)\s*(?:m²|m2|m\²|m\/²)/i);
+    if (areaMatch) {
+      const areaNumber = areaMatch[1].replace(/\s/g, '');
+      area = areaNumber + ' m²';
+    }
+
+    // 3. PARSING POČTU IZIEB
+    // Presné hľadávanie X-izbový alebo X izbový
+    let rooms = '3';
+    const roomsMatch = text.match(/(\d+)\s*[-]?\s*(?:izbový|izbam|room|izby)/i);
+    if (roomsMatch) {
+      const roomNumber = parseInt(roomsMatch[1]);
+      // Kontrola aby to neboli čísla 1-5 z iného kontextu
+      if (roomNumber >= 1 && roomNumber <= 10) {
+        rooms = roomNumber.toString();
+      }
+    }
+
+    // 4. PARSING STAVU NEHNUTEĽNOSTI
+    // Hľadaj kľúčové slová
+    let condition = 'Čerstvo zrekonštruovaná';
+    
+    const conditionKeywords = {
+      'Novostavba': ['novostavb', 'nová stavb'],
+      'Pôvodný stav': ['pôvodný stav', 'originál'],
+      'Kompletná rekonštrukcia': ['kompletná rekonštrukc', 'úplná rekonštrukc', 'komplexná obnov'],
+      'Čiastočná rekonštrukcia': ['čiastočná rekonštrukc', 'rekonštrukc', 'obnov'],
+    };
+
+    for (const [conditionName, keywords] of Object.entries(conditionKeywords)) {
+      for (const keyword of keywords) {
+        if (new RegExp(keyword, 'i').test(text)) {
+          condition = conditionName;
+          break;
+        }
+      }
+      if (condition !== 'Čerstvo zrekonštruovaná') break;
+    }
+
+    // 5. PARSING LOKALITY
+    let location = 'Bratislava, Staré Mesto';
+    // Hľadaj mestá a mestnosti
+    const cityMatch = text.match(/(Bratislava|Banská Bystrica|Košice|Prešov|Žilina|Nitra|Trenčín|Zvolen|Lučenec|Dolný Kubín|Martin|Zvolen|Zvolen|Michalovce|Spišská Nová Ves|Poprad|Liptovský Mikuláš|Banská Štiavnica|Kremnica)/i);
+    if (cityMatch) {
+      location = cityMatch[0];
+      // Skús nájsť mestnosť v zmysle ako časti mesta
+      const districtMatch = text.match(/(?:oblasť|mestnosť|časti|mestnej časti|mestská časť|mestskej časti)\s+([A-Z][a-zá-žč]*)/i);
+      if (districtMatch) {
+        location = cityMatch[0] + ', ' + districtMatch[1];
+      }
+    }
 
     return {
-      price: priceMatch ? priceMatch[0] : '250 000 €',
-      area: areaMatch ? areaMatch[1] + ' m²' : '120 m²',
-      rooms: roomsMatch ? roomsMatch[1] : '3',
-      location: 'Bratislava, Staré Mesto',
-      condition: 'Čerstvo zrekonštruovaná',
+      price,
+      area,
+      rooms,
+      location,
+      condition,
     };
   };
 
